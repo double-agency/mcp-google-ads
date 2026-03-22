@@ -32,7 +32,29 @@ mcp = FastMCP(
 
 # Constants and configuration
 SCOPES = ['https://www.googleapis.com/auth/adwords']
-API_VERSION = "v20"  # Google Ads API version
+API_VERSION = None  # Auto-detected on first use
+
+def _detect_api_version():
+    """Try versions from newest to oldest, return the first that responds."""
+    global API_VERSION
+    if API_VERSION:
+        return API_VERSION
+    for v in range(25, 17, -1):
+        try:
+            r = requests.get(
+                f"https://googleads.googleapis.com/v{v}/customers:listAccessibleCustomers",
+                headers={"developer-token": GOOGLE_ADS_DEVELOPER_TOKEN or ""},
+                timeout=5
+            )
+            if r.status_code != 404:
+                API_VERSION = f"v{v}"
+                logger.info(f"Auto-detected Google Ads API version: {API_VERSION}")
+                return API_VERSION
+        except Exception:
+            continue
+    API_VERSION = "v20"
+    logger.warning(f"Could not auto-detect API version, falling back to {API_VERSION}")
+    return API_VERSION
 
 # Load environment variables
 try:
@@ -48,6 +70,9 @@ GOOGLE_ADS_CREDENTIALS_PATH = os.environ.get("GOOGLE_ADS_CREDENTIALS_PATH")
 GOOGLE_ADS_DEVELOPER_TOKEN = os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN")
 GOOGLE_ADS_LOGIN_CUSTOMER_ID = os.environ.get("GOOGLE_ADS_LOGIN_CUSTOMER_ID", "")
 GOOGLE_ADS_AUTH_TYPE = os.environ.get("GOOGLE_ADS_AUTH_TYPE", "oauth")  # oauth or service_account
+
+# Auto-detect API version on startup
+_detect_api_version()
 
 def format_customer_id(customer_id: str) -> str:
     """Format customer ID to ensure it's 10 digits without dashes."""
